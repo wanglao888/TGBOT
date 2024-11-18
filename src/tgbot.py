@@ -43,7 +43,7 @@ def send_verification_message(update: Update, context: CallbackContext):
     if not context.user_data.get("awaiting_verification", False):
         context.user_data["awaiting_verification"] = True
         update.message.reply_text(
-            "这是一个验证问题，你要问的是否为技术问题？",
+            "在线验证：你要问的是否为技术问题？\n每24小时仅有一次选择机会。",
             reply_markup=get_verification_keyboard(),
         )
 
@@ -71,12 +71,12 @@ def handle_verification_callback(update: Update, context: CallbackContext):
 
     if query.data == "tech_yes":
         # 选择是技术问题，自动回复并记录 24 小时内丢弃消息的时间
-        query.edit_message_text("免费项目无任何技术支持，自行解决。")
+        query.edit_message_text("免费项目不解答问题，自行搜索解决。\n您今日的验证次数已用完，24小时后可重新发起对话。\n下次验证之前的消息将被自动丢弃")
         context.user_data["tech_rejected_until"] = datetime.now() + timedelta(hours=24)
 
     elif query.data == "tech_no":
         # 选择非技术问题
-        query.edit_message_text("您的消息已通过验证，请继续发送。")
+        query.edit_message_text("您已通过验证，请重新发送你的业务需求，我将转发给管理员。")
 
     # 验证完成后，解除等待验证状态，并更新最后验证时间
     context.user_data["awaiting_verification"] = False
