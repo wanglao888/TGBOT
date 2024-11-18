@@ -3,6 +3,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 from datetime import datetime, timedelta
 import time
+import os
 
 # 从环境变量获取 Token 和用户 ID
 TOKEN = os.getenv("TOKEN")
