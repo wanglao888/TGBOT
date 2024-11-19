@@ -103,26 +103,26 @@ async def handle_verification_callback(update: Update, context: ContextTypes.DEF
 
 # 处理已验证的消息
 async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    original_user_id = update.effective_chat.id  # 记录消息发送者的 chat.id
+
     if update.message.photo or update.message.document:
-        # 转发图片或文件
         await context.bot.forward_message(
             chat_id=MY_USER_ID,
-            from_chat_id=update.effective_chat.id,
+            from_chat_id=original_user_id,
             message_id=update.message.message_id,
-        )
-        logger.info(
-            f"Media from {update.effective_user.first_name} ({update.effective_chat.id}) forwarded to user {MY_USER_ID}"
         )
     else:
-        # 转发文本消息
         await context.bot.forward_message(
             chat_id=MY_USER_ID,
-            from_chat_id=update.effective_chat.id,
+            from_chat_id=original_user_id,
             message_id=update.message.message_id,
         )
-        logger.info(
-            f"Message from {update.effective_user.first_name} ({update.effective_chat.id}) forwarded to user {MY_USER_ID}"
-        )
+
+    # 存储原始消息和用户的映射
+    context.chat_data[update.message.message_id] = original_user_id
+    logger.info(
+        f"Message from {update.effective_user.first_name} ({original_user_id}) forwarded to user {MY_USER_ID}"
+    )
 
 # 回复处理函数
 async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -130,12 +130,16 @@ async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 获取原始消息的发送者ID
         forwarded_message = update.message.reply_to_message
         if forwarded_message:
-            await context.bot.send_message(
-                chat_id=forwarded_message.chat.id, text=update.message.text
-            )
-            logger.info(
-                f"Reply from {update.effective_user.first_name} sent to original user."
-            )
+            original_user_id = context.chat_data.get(forwarded_message.message_id)
+            if original_user_id:
+                await context.bot.send_message(
+                    chat_id=original_user_id, text=update.message.text
+                )
+                logger.info(
+                    f"Reply from {update.effective_user.first_name} sent to original user {original_user_id}."
+                )
+            else:
+                logger.warning("Original user ID not found for forwarded message.")
 
 # /start 命令处理
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
