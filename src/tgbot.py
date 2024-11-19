@@ -64,6 +64,7 @@ async def send_verification_message(update: Update, context: ContextTypes.DEFAUL
 
 # 消息映射存储（带线程锁）
 message_mapping = {}
+reverse_mapping = {}
 mapping_lock = Lock()
 
 # 消息处理函数
@@ -107,6 +108,8 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     with mapping_lock:
         message_mapping[forwarded_message.message_id] = original_user_id
+        # 记录原消息 ID 到转发后消息 ID 的映射
+        reverse_mapping[update.message.message_id] = forwarded_message.message_id
 
     logger.info(
         f"Message from {update.effective_user.first_name} ({original_user_id}) forwarded to user {MY_USER_ID}."
@@ -115,27 +118,26 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 回复处理函数
 async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == MY_USER_ID:
-        forwarded_message = update.message.reply_to_message
-        original_user_id = None
-
-        if forwarded_message:
+        replied_to_msg = update.message.reply_to_message
+        if replied_to_msg:
+            original_user_id = None
             with mapping_lock:
-                # 检查引用消息是否在映射中，如果不在则查看是否有来源用户
-                original_user_id = message_mapping.get(forwarded_message.message_id)
-                if not original_user_id and forwarded_message.forward_from:
-                    original_user_id = forwarded_message.forward_from.id
+                # 在两张映射表之间循环，确保我们连接到正确的用户
+                original_forwarded_msg_id = reverse_mapping.get(replied_to_msg.message_id)
+                if original_forwarded_msg_id:
+                    original_user_id = message_mapping.get(original_forwarded_msg_id)
 
-        if original_user_id:
-            await context.bot.send_message(
-                chat_id=original_user_id, text=update.message.text
-            )
-            logger.info(
-                f"Reply from {update.effective_user.first_name} sent to original user {original_user_id}."
-            )
-        else:
-            logger.warning(
-                f"No mapping found for the forwarded message (ID: {forwarded_message.message_id})."
-            )
+            if original_user_id:
+                await context.bot.send_message(
+                    chat_id=original_user_id, text=update.message.text
+                )
+                logger.info(
+                    f"Reply from {update.effective_user.first_name} sent to original user {original_user_id}."
+                )
+            else:
+                logger.warning(
+                    f"No mapping found for the forwarded message (ID: {replied_to_msg.message_id})."
+                )
 
 # /start 命令处理
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
