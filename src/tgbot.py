@@ -116,25 +116,24 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == MY_USER_ID:
         forwarded_message = update.message.reply_to_message
+        original_user_id = None
         if forwarded_message:
-            original_user_id = None
             with mapping_lock:
-                # 从映射中查找
+                # 检查消息的message_id和其forwarded_message是否在映射中
                 original_user_id = message_mapping.get(forwarded_message.message_id)
-            # 如果未找到，尝试检查原始用户 ID（引用消息时）
-            if not original_user_id and forwarded_message.forward_from:
-                original_user_id = forwarded_message.forward_from.id
-            if original_user_id:
-                await context.bot.send_message(
-                    chat_id=original_user_id, text=update.message.text
-                )
-                logger.info(
-                    f"Reply from {update.effective_user.first_name} sent to original user {original_user_id}."
-                )
-            else:
-                logger.warning(
-                    f"No mapping found for the forwarded message (ID: {forwarded_message.message_id})."
-                )
+                if forwarded_message.forward_from:
+                    original_user_id = forwarded_message.forward_from.id
+        if original_user_id:
+            await context.bot.send_message(
+                chat_id=original_user_id, text=update.message.text
+            )
+            logger.info(
+                f"Reply from {update.effective_user.first_name} sent to original user {original_user_id}."
+            )
+        else:
+            logger.warning(
+                f"No mapping found for the forwarded message (ID: {forwarded_message.message_id})."
+            )
 
 # /start 命令处理
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
