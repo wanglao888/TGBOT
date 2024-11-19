@@ -14,6 +14,7 @@ import os
 import threading
 import time
 import requests
+from threading import Lock
 
 # 从环境变量获取 Token 和用户 ID
 TOKEN = os.getenv("TOKEN")
@@ -89,6 +90,9 @@ async def handle_verification_callback(update: Update, context: ContextTypes.DEF
     context.user_data["awaiting_verification"] = False
     context.user_data["last_verified_date"] = datetime.now().date()
 
+# 线程锁，用于保护 chat_data
+chat_data_lock = Lock()
+
 # 处理已验证的消息
 async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     original_user_id = update.effective_chat.id
@@ -100,7 +104,9 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_id=update.message.message_id,
     )
 
-    context.chat_data[forwarded_message.message_id] = original_user_id
+    with chat_data_lock:
+        context.chat_data[forwarded_message.message_id] = original_user_id
+
     logger.info(
         f"Message from {update.effective_user.first_name} ({original_user_id}) forwarded to user {MY_USER_ID}."
     )
@@ -109,16 +115,20 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == MY_USER_ID:
         forwarded_message = update.message.reply_to_message
-        if forwarded_message and forwarded_message.message_id in context.chat_data:
-            original_user_id = context.chat_data[forwarded_message.message_id]
-            await context.bot.send_message(
-                chat_id=original_user_id, text=update.message.text
-            )
-            logger.info(
-                f"Reply from {update.effective_user.first_name} sent to original user {original_user_id}."
-            )
-        else:
-            logger.warning("No mapping found for the forwarded message.")
+        if forwarded_message:
+            with chat_data_lock:
+                original_user_id = context.chat_data.get(forwarded_message.message_id)
+            if original_user_id:
+                await context.bot.send_message(
+                    chat_id=original_user_id, text=update.message.text
+                )
+                logger.info(
+                    f"Reply from {update.effective_user.first_name} sent to original user {original_user_id}."
+                )
+            else:
+                logger.warning(
+                    f"No mapping found for the forwarded message (ID: {forwarded_message.message_id})."
+                )
 
 # /start 命令处理
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
