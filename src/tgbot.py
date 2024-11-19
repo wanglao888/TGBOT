@@ -117,12 +117,14 @@ async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == MY_USER_ID:
         forwarded_message = update.message.reply_to_message
         original_user_id = None
+
         if forwarded_message:
             with mapping_lock:
-                # 检查消息的message_id和其forwarded_message是否在映射中
+                # 检查引用消息是否在映射中，如果不在则查看是否有来源用户
                 original_user_id = message_mapping.get(forwarded_message.message_id)
-                if forwarded_message.forward_from:
+                if not original_user_id and forwarded_message.forward_from:
                     original_user_id = forwarded_message.forward_from.id
+
         if original_user_id:
             await context.bot.send_message(
                 chat_id=original_user_id, text=update.message.text
