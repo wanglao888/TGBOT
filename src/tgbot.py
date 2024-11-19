@@ -62,6 +62,10 @@ async def send_verification_message(update: Update, context: ContextTypes.DEFAUL
             reply_markup=get_verification_keyboard(),
         )
 
+# 消息映射存储（带线程锁）
+message_mapping = {}
+mapping_lock = Lock()
+
 # 消息处理函数
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if needs_verification(context):
@@ -90,9 +94,6 @@ async def handle_verification_callback(update: Update, context: ContextTypes.DEF
     context.user_data["awaiting_verification"] = False
     context.user_data["last_verified_date"] = datetime.now().date()
 
-# 线程锁，用于保护 chat_data
-chat_data_lock = Lock()
-
 # 处理已验证的消息
 async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     original_user_id = update.effective_chat.id
@@ -104,8 +105,8 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_id=update.message.message_id,
     )
 
-    with chat_data_lock:
-        context.chat_data[forwarded_message.message_id] = original_user_id
+    with mapping_lock:
+        message_mapping[forwarded_message.message_id] = original_user_id
 
     logger.info(
         f"Message from {update.effective_user.first_name} ({original_user_id}) forwarded to user {MY_USER_ID}."
@@ -116,8 +117,8 @@ async def handle_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == MY_USER_ID:
         forwarded_message = update.message.reply_to_message
         if forwarded_message:
-            with chat_data_lock:
-                original_user_id = context.chat_data.get(forwarded_message.message_id)
+            with mapping_lock:
+                original_user_id = message_mapping.get(forwarded_message.message_id)
             if original_user_id:
                 await context.bot.send_message(
                     chat_id=original_user_id, text=update.message.text
